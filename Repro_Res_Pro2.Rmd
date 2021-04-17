@@ -1,0 +1,136 @@
+---
+title: "Impacts of Severe Weather Events"
+author: "YC Hsieh"
+date: "2021/4/17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+```
+
+## Synopsis
+The data analysis aims for understanding the impacts of severe weather events in the US. The impact of each event to population health (included fatalities and injuries) and economics (included property damage and crop damage) were summarized.  
+The analysis concludes "TORNADO" is the most harmful event to population health, and "FLOOD" is the event with the greatest economic consequences.
+
+## Data Processing
+### Download and read data into R
+```{r, cache=TRUE}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(fileUrl, "./StormData.bz2")
+DATA <- read.csv("~/R/Repro_Res_Pro2/StormData.bz2")
+```
+### Dataframe processing for Question 1
+Summarized total fatalities and injuries of each event type and was saved in dataframes.
+```{r}
+df1 <- DATA %>% 
+  group_by(EVTYPE) %>% 
+  summarise(Fatal = sum(FATALITIES), Injury = sum(INJURIES)) %>%
+  filter(Fatal != 0, Injury != 0) %>%
+  mutate(Total.harmed = Fatal + Injury,
+         EVTYPE = as.factor(EVTYPE))
+df1.1 <- df1 %>%
+  select(EVTYPE, Fatal) %>%
+  arrange(desc(Fatal)) %>%
+  head(5)
+# top 5 total fatality
+df1.2 <- df1 %>%
+  select(EVTYPE, Injury) %>%
+  arrange(desc(Injury)) %>%
+  head(5)
+# top 5 total injury
+```
+### Dataframe processing for Question 2
+The events with 0 total damage was removed.  
+Transformed PROPDMGEXP into real values.
+Some of the PROPDMGEXP were randomly coded and the official document did not specify the meaning. I considered them as 1 exp. 
+```{r}
+df2 <- DATA %>% 
+  select(EVTYPE, PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP) %>%
+  filter(PROPDMG>0 | CROPDMG>0) %>%
+  mutate(PROPDMGEXP.n = case_when(PROPDMGEXP=="" ~ 1,
+                                  str_detect(PROPDMGEXP, "[:digit:]") ~ 1,
+                                  str_detect(PROPDMGEXP, "[-+?]") ~ 1,
+                                  str_detect(PROPDMGEXP, "[Kk]") ~ 1000,
+                                  str_detect(PROPDMGEXP, "[Mm]") ~ 1000000,
+                                  str_detect(PROPDMGEXP, "[Bb]") ~ 1000000000),
+         CROPDMGEXP.n = case_when(CROPDMGEXP=="" ~ 1,
+                                  str_detect(CROPDMGEXP, "[:digit:]") ~ 1,
+                                  str_detect(CROPDMGEXP, "[-+?]") ~ 1,
+                                  str_detect(CROPDMGEXP, "[Kk]") ~ 1000,
+                                  str_detect(CROPDMGEXP, "[Mm]") ~ 1000000,
+                                  str_detect(CROPDMGEXP, "[Bb]") ~ 1000000000)) %>%
+  # transferred randomly coded values into numbers
+  mutate(PROPDMG.total = PROPDMG * PROPDMGEXP.n,
+         CROPDMG.total = CROPDMG * CROPDMGEXP.n) %>%
+  # calculated the value of each DMG in real numbers
+  group_by(EVTYPE) %>%
+  summarise(PROPDMG.total = sum(PROPDMG.total),
+            CROPDMG.total = sum(CROPDMG.total)) %>%
+  mutate(Total.DMG = PROPDMG.total + CROPDMG.total)
+df2.1 <- df2 %>%
+  select(EVTYPE, PROPDMG.total) %>%
+  arrange(desc(PROPDMG.total)) %>%
+  head(5)
+# top 5 total PROPDMG
+df2.2 <- df2 %>%
+  select(EVTYPE, CROPDMG.total) %>%
+  arrange(desc(CROPDMG.total)) %>%
+  head(5)
+# top 5 total CROPDMG
+```
+
+## Results  
+### 1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?  
+From the below summarized dataframe and barplot, the top 5 harmful events "TORNADO", "EXCESSIVE HEAT", "TSTM WIND", "FLOOD" and "LIGHTNING".   
+"TORNADO", which was the top harmful event to both fatalities and injuries, caused 5633 fatalities and 91346 injuries, and harmed 96979 people's health in total.  
+```{r}
+df1.1
+```
+The above dataframe shows top 5 events causing fatalities.
+```{r}
+df1.2
+```
+The above dataframe shows top 5 events causing Injuries.
+```{r}
+df1 %>% 
+  arrange(desc(Total.harmed)) %>%
+  head(5) %>%
+  ggplot(aes(x = fct_reorder(EVTYPE, Total.harmed, .desc = TRUE), 
+             y = Total.harmed/1000)) +
+  geom_col() +
+  labs(x = "Type of events", y = "Total people harmed (K)",
+       title = "Top 5 events harmful to population health") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
+
+### 2. Across the United States, which types of events have the greatest economic consequences?  
+From the below summarized dataframe and barplot, the top 5 events with the greastest economic consequences are "FLOOD", "Hurricane/Typhoon", "TORNADO", "STORM SURGE" and "FLASH FLOOD".  
+"FLOOD" is the most harmful event to economics in "property damage".  
+"DROUGHT" is the most harmful event to economics in "crop damage".  
+In total, "FLOOD" caused the most harm to economics.
+```{r}
+df2.1
+```
+The above dataframe shows top 5 harmful events to "property damage".
+```{r}
+df2.2
+```
+The above dataframe shows top 5 harmful events to "crop damage".
+```{r}
+df2 %>% 
+  arrange(desc(Total.DMG)) %>%
+  head(5) %>%
+  ggplot(aes(x = fct_reorder(EVTYPE, Total.DMG, .desc = TRUE), 
+             y = Total.DMG/1000000000)) +
+  geom_col() +
+  labs(x = "Type of events", y = "Total economic damage\n(Billion dollars)",
+       title = "Top 5 events damaging to economics") +
+  theme_classic() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.text.x = element_text(angle = 45, vjust = 0.5))
+```
